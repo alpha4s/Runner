@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Infinite Runner Prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+
+<body>
+    <div id="game-container"></div>
+
+    <div id="ui-layer" style="display: none;">
+        <div id="score-board">
+            <div id="stats-left">
+                <div class="stat-line"><span>Score:</span> <span class="stat-value" id="score">0</span></div>
+                <div class="stat-line"><span>Distance:</span> <span class="stat-value" id="distance">0m</span></div>
+                <div class="stat-line"><span>Coins:</span> <span class="stat-value" id="coins">0</span></div>
+            </div>
+            <div id="health-right">
+                <!-- Hearts generated dynamically now -->
+            </div>
+        </div>
+        <div id="powerup-container">
+            <div id="shield-status">
+                SHIELD ACTIVE
+                <div class="powerup-bar-bg">
+                    <div id="shield-bar" class="powerup-bar-fill"></div>
+                </div>
+            </div>
+            <div id="magnet-status">
+                MAGNET ACTIVE
+                <div class="powerup-bar-bg">
+                    <div id="magnet-bar" class="powerup-bar-fill"></div>
+                </div>
+            </div>
+        </div>
+        <div id="game-over">
+            GAME OVER
+            <button class="menu-btn" onclick="window.location.reload()">MAIN MENU</button>
+        </div>
+    </div>
+    <div id="zone-toast" class="zone-toast">ZONE 1: VERDANT PLAINS</div>
+
+    <!-- MAIN MENU -->
+    <div id="main-menu" class="overlay-menu" style="display: flex;">
+        <div id="menu-stats-left">
+            <div class="stat-line"><span>High Score:</span> <span class="stat-value" id="menu-high-score">0</span></div>
+            <div class="stat-line"><span>Max Distance:</span> <span class="stat-value" id="menu-max-dist">0 m</span>
+            </div>
+            <div class="stat-line"><span>Max Coins:</span> <span class="stat-value" id="menu-max-coins">0</span></div>
+        </div>
+        <div class="menu-title" style="margin-bottom: 10px;">SPIN</div>
+        <div
+            style="color: rgba(255,255,255,0.7); font-size: 16px; margin-bottom: 30px; text-align: center; line-height: 1.5;">
+            <b>CONTROLS:</b> Use WASD or Arrows to Move & Jump.<br>
+            Double-tap Space in mid-air to fast fall.
+        </div>
+        <button class="menu-btn" id="btn-start">START RUN</button>
+        <button class="menu-btn" id="btn-shop">UPGRADES SHOP</button>
+        <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
+            <span style="font-size: 20px; font-weight: bold;">SPEED:</span>
+            <button class="menu-btn" id="btn-speed-1"
+                style="font-size: 16px; padding: 10px 15px; margin: 0;">1.0X</button>
+            <button class="menu-btn" id="btn-speed-15"
+                style="font-size: 16px; padding: 10px 15px; margin: 0;">1.5X</button>
+            <button class="menu-btn" id="btn-speed-2"
+                style="font-size: 16px; padding: 10px 15px; margin: 0;">2.0X</button>
+            <button class="menu-btn" id="btn-sound"
+                style="font-size: 16px; padding: 10px 15px; margin: 0; min-width: 130px;">SOUND: ON</button>
+        </div>
+        <div class="menu-coins">Vault: <span id="menu-coin-display">0</span> 💰</div>
+        <button class="menu-btn" id="btn-reset"
+            style="background: #ff3333; font-size: 14px; padding: 10px 20px; position: absolute; bottom: 20px; right: 20px;">RESET
+            SAVE</button>
+    </div>
+
+    <!-- SHOP MENU -->
+    <div id="shop-ui" class="overlay-menu">
+        <div class="menu-title" style="font-size: 48px; margin-bottom: 20px;">UPGRADES</div>
+        <div class="menu-coins" style="margin-top: 0; margin-bottom: 20px;">Vault: <span id="shop-coin-display">0</span>
+            💰</div>
+
+        <div class="shop-container" id="shop-items-container">
+            <!-- Items injected by JS -->
+        </div>
+
+        <button class="menu-btn" id="btn-shop-back" style="margin-top: 30px; background: #555;">BACK</button>
+    </div>
+
+    <script type="module" src="./js/main.js"></script>
+</body>
+
+</html>
