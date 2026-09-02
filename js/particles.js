@@ -1,224 +1,120 @@
-export class DustSystem {
-    constructor(scene) {
-        this.scene = scene;
-        this.geo = new THREE.PlaneGeometry(1, 1);
-        this.dummy = new THREE.Object3D();
-        this._color = new THREE.Color();
-
-        const size = 32;
-        const data = new Uint8Array(size * size * 4);
-        const center = size / 2;
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                const dist = Math.hypot(x - center, y - center) / center;
-                const alpha = Math.max(0, Math.pow(1 - Math.min(1, dist), 1.8)) * 255;
-                const i = (y * size + x) * 4;
-                data[i] = 255;
-                data[i + 1] = 255;
-                data[i + 2] = 255;
-                data[i + 3] = alpha;
-            }
-        }
-        this.tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
-        this.tex.needsUpdate = true;
-
-        this.mat = new THREE.MeshBasicMaterial({
-            map: this.tex,
-            transparent: true,
-            opacity: 0.7,
-            depthWrite: false,
-            blending: THREE.NormalBlending
-        });
-
-        this.capacity = 300;
-        this.mesh = new THREE.InstancedMesh(this.geo, this.mat, this.capacity);
-        this.mesh.frustumCulled = false;
-        this.scene.add(this.mesh);
-
-        const white = new THREE.Color(1, 1, 1);
-        for (let i = 0; i < this.capacity; i++) {
-            this.mesh.setColorAt(i, white);
-        }
-
-        this.writeIdx = 0;
-        this.activeIndices = [];
-        this.particles = Array.from({ length: this.capacity }, () => ({
-            active: false,
-            life: 0,
-            x: 0, y: 0, z: 0,
-            vx: 0, vy: 0, vz: 0,
-            rot: 0, rotSpeed: 0,
-            maxScale: 1
-        }));
-    }
-
-    spawn(x, y, z, colorHex, count = 1, speedMult = 1) {
-        this._color.setHex(colorHex);
-
-        for (let i = 0; i < count; i++) {
-            const idx = this.writeIdx;
-            this.writeIdx = (this.writeIdx + 1) % this.capacity;
-
-            this.mesh.setColorAt(idx, this._color);
-
-            const p = this.particles[idx];
-            if (!p.active) {
-                p.active = true;
-                this.activeIndices.push(idx);
-            }
-
-            p.life = 1.0;
-            p.x = x + (Math.random() - 0.5) * 0.3;
-            p.y = y;
-            p.z = z + (Math.random() - 0.5) * 0.2;
-            p.vx = (Math.random() - 0.5) * 0.03 * speedMult;
-            p.vy = 0.015 + Math.random() * 0.025;
-            p.vz = 0.04 + Math.random() * 0.04;
-            p.rot = Math.random() * Math.PI * 2;
-            p.rotSpeed = (Math.random() - 0.5) * 0.05;
-            p.maxScale = 1.2 + Math.random() * 0.8;
-        }
-        if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
-    }
-
-    update(gameSpeed, dt) {
-        let updated = false;
-
-        for (let i = this.activeIndices.length - 1; i >= 0; i--) {
-            const idx = this.activeIndices[i];
-            const p = this.particles[idx];
-
-            p.life -= 0.025 * dt;
-
-            if (p.life <= 0) {
-                p.active = false;
-                this.dummy.scale.set(0, 0, 0);
-                this.dummy.updateMatrix();
-                this.mesh.setMatrixAt(idx, this.dummy.matrix);
-                updated = true;
-
-                this.activeIndices[i] = this.activeIndices[this.activeIndices.length - 1];
-                this.activeIndices.pop();
-            } else {
-                p.x += p.vx * dt;
-                p.y += p.vy * dt;
-                p.z += (p.vz + gameSpeed * 0.3) * dt;
-                p.rot += p.rotSpeed * dt;
-
-                const swell = (1.0 - Math.pow(p.life - 0.5, 2) * 4);
-                const scale = Math.max(0.01, swell * p.maxScale * p.life);
-
-                this.dummy.position.set(p.x, p.y, p.z);
-                this.dummy.rotation.set(0, 0, p.rot);
-                this.dummy.scale.set(scale, scale, scale);
-                this.dummy.updateMatrix();
-
-                this.mesh.setMatrixAt(idx, this.dummy.matrix);
-                updated = true;
-            }
-        }
-
-        if (updated) this.mesh.instanceMatrix.needsUpdate = true;
-    }
-}
-
 export class ParticleManager {
     constructor(scene, texture) {
         this.scene = scene;
         this.geo = new THREE.PlaneGeometry(1, 1);
-        this.dummy = new THREE.Object3D();
-        this.dustSystem = new DustSystem(scene);
+        this._color = new THREE.Color();
 
         const createMat = (map, opacity, blending) => new THREE.MeshBasicMaterial({
             map, transparent: true, opacity, depthWrite: false, blending
         });
 
-        this.popMesh = new THREE.InstancedMesh(this.geo, createMat(texture, 0.7, THREE.AdditiveBlending), 300);
+        // Dust texture
+        const dSize = 32;
+        const dustData = new Uint8Array(dSize * dSize * 4);
+        const dCenter = dSize / 2;
+        for (let y = 0; y < dSize; y++) {
+            for (let x = 0; x < dSize; x++) {
+                const dist = Math.hypot(x - dCenter, y - dCenter) / dCenter;
+                const alpha = Math.max(0, Math.pow(1 - Math.min(1, dist), 1.8)) * 255;
+                const i = (y * dSize + x) * 4;
+                dustData[i] = dustData[i + 1] = dustData[i + 2] = 255;
+                dustData[i + 3] = alpha;
+            }
+        }
+        this.dustTex = new THREE.DataTexture(dustData, dSize, dSize, THREE.RGBAFormat);
+        this.dustTex.needsUpdate = true;
 
-        const size = 32;
-        const bubbleData = new Uint8Array(size * size * 4);
-        const center = size / 2;
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                const dist = Math.hypot(x - center, y - center) / center;
-                let alpha = 0;
-                if (dist <= 0.95 && dist >= 0.70) {
-                    alpha = Math.sin((dist - 0.70) / 0.25 * Math.PI) * 220;
-                }
+        // Bubble texture
+        const bubbleData = new Uint8Array(dSize * dSize * 4);
+        for (let y = 0; y < dSize; y++) {
+            for (let x = 0; x < dSize; x++) {
+                const dist = Math.hypot(x - dCenter, y - dCenter) / dCenter;
+                let alpha = (dist <= 0.95 && dist >= 0.70) ? Math.sin((dist - 0.70) / 0.25 * Math.PI) * 220 : 0;
                 const specDist = Math.hypot(x - 11, y - 11) / 3.5;
-                if (specDist <= 1.0) {
-                    alpha = Math.max(alpha, (1.0 - specDist) * 255);
-                }
-                const i = (y * size + x) * 4;
-                bubbleData[i] = 255;
-                bubbleData[i + 1] = 255;
-                bubbleData[i + 2] = 255;
+                if (specDist <= 1.0) alpha = Math.max(alpha, (1.0 - specDist) * 255);
+                const i = (y * dSize + x) * 4;
+                bubbleData[i] = bubbleData[i + 1] = bubbleData[i + 2] = 255;
                 bubbleData[i + 3] = alpha;
             }
         }
-        this.bubbleTex = new THREE.DataTexture(bubbleData, size, size, THREE.RGBAFormat);
+        this.bubbleTex = new THREE.DataTexture(bubbleData, dSize, dSize, THREE.RGBAFormat);
         this.bubbleTex.needsUpdate = true;
-        this.bubbleMesh = new THREE.InstancedMesh(this.geo, createMat(this.bubbleTex, 0.85, THREE.AdditiveBlending), 200);
 
-        this.popMesh.frustumCulled = this.bubbleMesh.frustumCulled = false;
-        this.scene.add(this.popMesh, this.bubbleMesh);
+        this.popMesh = new THREE.InstancedMesh(this.geo, createMat(texture, 0.7, THREE.AdditiveBlending), 300);
+        this.bubbleMesh = new THREE.InstancedMesh(this.geo, createMat(this.bubbleTex, 0.85, THREE.AdditiveBlending), 200);
+        this.dustMesh = new THREE.InstancedMesh(this.geo, createMat(this.dustTex, 0.7, THREE.NormalBlending), 300);
+
+        this.popMesh.frustumCulled = this.bubbleMesh.frustumCulled = this.dustMesh.frustumCulled = false;
+        this.scene.add(this.popMesh, this.bubbleMesh, this.dustMesh);
 
         const white = new THREE.Color(1, 1, 1);
         for (let i = 0; i < 300; i++) {
             this.popMesh.setColorAt(i, white);
+            this.dustMesh.setColorAt(i, white);
             if (i < 200) this.bubbleMesh.setColorAt(i, white);
         }
 
-        this.popIdx = this.bubbleIdx = 0;
+        this.writeIdx = { pop: 0, bubble: 0, dust: 0 };
+        this.offsets = { pop: 0, bubble: 300, dust: 500 };
+        this.caps = { pop: 300, bubble: 200, dust: 300 };
+        this.meshMap = { pop: this.popMesh, bubble: this.bubbleMesh, dust: this.dustMesh };
+
         this.activeIndices = [];
-        this.particleData = Array.from({ length: 500 }, () => ({
-            active: false, life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, scale: 1, type: 0, meshIdx: 0, phase: 0
+        this.particles = Array.from({ length: 800 }, () => ({
+            active: false, life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0,
+            scale: 1, type: 'pop', meshIdx: 0, phase: 0, rot: 0, rotSpeed: 0, maxScale: 1
         }));
-        this._colorObj = new THREE.Color();
-        this.meshMap = { pop: this.popMesh, bubble: this.bubbleMesh };
     }
 
-    spawn(x, y, z, color, count = 1, velocityMult = 1, type = 'pop') {
-        if (type === 'dust') {
-            this.dustSystem.spawn(x, y, z, color, count, velocityMult);
-            return;
-        }
-
-        const c = this._colorObj.set(color);
+    spawn(x, y, z, color, count = 1, speedMult = 1, type = 'pop') {
         const mesh = this.meshMap[type];
         if (!mesh) return;
 
+        if (color && color.isColor) this._color.copy(color);
+        else if (typeof color === 'number') this._color.setHex(color);
+        else this._color.set(color);
+
+        const cap = this.caps[type];
+        const offset = this.offsets[type];
+
         for (let i = 0; i < count; i++) {
-            let idx, dataIdx;
-            if (type === 'bubble') {
-                idx = this.bubbleIdx; dataIdx = 300 + idx;
-                this.bubbleIdx = (this.bubbleIdx + 1) % 200;
-            } else {
-                idx = this.popIdx; dataIdx = idx;
-                this.popIdx = (this.popIdx + 1) % 300;
-            }
+            const mIdx = this.writeIdx[type];
+            this.writeIdx[type] = (mIdx + 1) % cap;
+            const dataIdx = offset + mIdx;
 
-            mesh.setColorAt(idx, c);
+            mesh.setColorAt(mIdx, this._color);
 
-            const p = this.particleData[dataIdx];
+            const p = this.particles[dataIdx];
             if (!p.active) {
                 p.active = true;
                 this.activeIndices.push(dataIdx);
             }
-            p.life = 1.0;
-            p.x = x; p.y = y; p.z = z;
-            p.type = type;
-            p.meshIdx = idx;
-            p.phase = Math.random() * Math.PI * 2;
 
-            if (type === 'bubble') {
+            p.life = 1.0;
+            p.type = type;
+            p.meshIdx = mIdx;
+
+            if (type === 'dust') {
+                p.x = x + (Math.random() - 0.5) * 0.3;
+                p.y = y;
+                p.z = z + (Math.random() - 0.5) * 0.2;
+                p.vx = (Math.random() - 0.5) * 0.03 * speedMult;
+                p.vy = 0.015 + Math.random() * 0.025;
+                p.vz = 0.04 + Math.random() * 0.04;
+                p.rot = Math.random() * Math.PI * 2;
+                p.rotSpeed = (Math.random() - 0.5) * 0.05;
+                p.maxScale = 1.2 + Math.random() * 0.8;
+            } else if (type === 'bubble') {
+                p.x = x; p.y = y; p.z = z;
                 p.vx = (Math.random() - 0.5) * 0.02;
                 p.vy = 0.04 + Math.random() * 0.06;
                 p.vz = 0.15 + Math.random() * 0.1;
                 p.scale = 0.2 + Math.random() * 0.25;
+                p.phase = Math.random() * Math.PI * 2;
             } else {
+                p.x = x; p.y = y; p.z = z;
                 const angle = Math.random() * Math.PI * 2;
-                const speed = (0.03 + Math.random() * 0.06) * velocityMult;
+                const speed = (0.03 + Math.random() * 0.06) * speedMult;
                 p.vx = Math.cos(angle) * speed;
                 p.vy = (Math.random() - 0.5) * speed;
                 p.vz = Math.sin(angle) * speed;
@@ -228,50 +124,69 @@ export class ParticleManager {
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
 
-    update(gameSpeed, deltaTimeScale) {
-        this.dustSystem.update(gameSpeed, deltaTimeScale);
-
-        let popUpdated = false, bubbleUpdated = false;
+    update(gameSpeed, dt) {
+        let dirtyPop = false, dirtyBubble = false, dirtyDust = false;
 
         for (let i = this.activeIndices.length - 1; i >= 0; i--) {
             const dataIdx = this.activeIndices[i];
-            const p = this.particleData[dataIdx];
+            const p = this.particles[dataIdx];
 
-            p.life -= (p.type === 'pop' ? 0.04 : 0.025) * deltaTimeScale;
+            p.life -= (p.type === 'pop' ? 0.04 : 0.025) * dt;
+
+            const arr = this.meshMap[p.type].instanceMatrix.array;
+            const o = p.meshIdx * 16;
 
             if (p.life <= 0) {
                 p.active = false;
-                this.dummy.scale.set(0, 0, 0);
-                this.dummy.updateMatrix();
-                this.meshMap[p.type].setMatrixAt(p.meshIdx, this.dummy.matrix);
+                arr[o] = 0; arr[o + 5] = 0; arr[o + 10] = 0;
 
-                if (p.type === 'pop') popUpdated = true;
-                else bubbleUpdated = true;
+                if (p.type === 'pop') dirtyPop = true;
+                else if (p.type === 'bubble') dirtyBubble = true;
+                else dirtyDust = true;
 
                 this.activeIndices[i] = this.activeIndices[this.activeIndices.length - 1];
                 this.activeIndices.pop();
             } else {
-                p.x += p.vx * deltaTimeScale;
-                p.y += p.vy * deltaTimeScale;
-                p.z += (p.vz + (gameSpeed * 0.3)) * deltaTimeScale;
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.z += (p.vz + gameSpeed * 0.3) * dt;
 
-                const ox = p.type === 'bubble' ? Math.sin(p.life * 10 + p.phase) * 0.1 : 0;
-                this.dummy.position.set(p.x + ox, p.y, p.z);
+                if (p.type === 'dust') {
+                    p.rot += p.rotSpeed * dt;
+                    const swell = 1.0 - Math.pow(p.life - 0.5, 2) * 4;
+                    const scale = Math.max(0.01, swell * p.maxScale * p.life);
+                    const c = Math.cos(p.rot) * scale;
+                    const s = Math.sin(p.rot) * scale;
 
-                const scale = p.life * p.scale;
-                this.dummy.scale.set(scale, scale, scale);
-                this.dummy.rotation.set(0, 0, 0);
+                    arr[o] = c;      arr[o + 1] = s;   arr[o + 2] = 0;   arr[o + 3] = 0;
+                    arr[o + 4] = -s; arr[o + 5] = c;   arr[o + 6] = 0;   arr[o + 7] = 0;
+                    arr[o + 8] = 0;  arr[o + 9] = 0;   arr[o + 10] = scale; arr[o + 11] = 0;
+                    arr[o + 12] = p.x; arr[o + 13] = p.y; arr[o + 14] = p.z; arr[o + 15] = 1;
+                    dirtyDust = true;
+                } else if (p.type === 'bubble') {
+                    const scale = p.life * p.scale;
+                    const ox = Math.sin(p.life * 10 + p.phase) * 0.1;
 
-                this.dummy.updateMatrix();
-                this.meshMap[p.type].setMatrixAt(p.meshIdx, this.dummy.matrix);
+                    arr[o] = scale;  arr[o + 1] = 0;   arr[o + 2] = 0;   arr[o + 3] = 0;
+                    arr[o + 4] = 0;  arr[o + 5] = scale; arr[o + 6] = 0; arr[o + 7] = 0;
+                    arr[o + 8] = 0;  arr[o + 9] = 0;   arr[o + 10] = scale; arr[o + 11] = 0;
+                    arr[o + 12] = p.x + ox; arr[o + 13] = p.y; arr[o + 14] = p.z; arr[o + 15] = 1;
+                    dirtyBubble = true;
+                } else {
+                    const scale = p.life * p.scale;
 
-                if (p.type === 'pop') popUpdated = true;
-                else bubbleUpdated = true;
+                    arr[o] = scale;  arr[o + 1] = 0;   arr[o + 2] = 0;   arr[o + 3] = 0;
+                    arr[o + 4] = 0;  arr[o + 5] = scale; arr[o + 6] = 0; arr[o + 7] = 0;
+                    arr[o + 8] = 0;  arr[o + 9] = 0;   arr[o + 10] = scale; arr[o + 11] = 0;
+                    arr[o + 12] = p.x; arr[o + 13] = p.y; arr[o + 14] = p.z; arr[o + 15] = 1;
+                    dirtyPop = true;
+                }
             }
         }
 
-        if (popUpdated) this.popMesh.instanceMatrix.needsUpdate = true;
-        if (bubbleUpdated) this.bubbleMesh.instanceMatrix.needsUpdate = true;
+        if (dirtyPop) this.popMesh.instanceMatrix.needsUpdate = true;
+        if (dirtyBubble) this.bubbleMesh.instanceMatrix.needsUpdate = true;
+        if (dirtyDust) this.dustMesh.instanceMatrix.needsUpdate = true;
     }
 }
 

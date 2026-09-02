@@ -9,11 +9,11 @@ import { ParticleManager } from './particles.js';
 class GameManager {
     constructor() {
         this.state = { score: 0, distance: 0, coins: 0 };
-        this.ui = new UIManager(this);
+        this.ui = new UIManager();
         this.ui.updateStats(0, 0, 0, true);
 
         this.audio = new AudioManager();
-        this.shopManager = new ShopManager(this.ui, this.audio);
+        this.shopManager = new ShopManager(this.audio);
         this.toastEl = document.getElementById('zone-toast');
 
         this.scene = new THREE.Scene();
@@ -66,6 +66,8 @@ class GameManager {
         this.isTransitioningZone = false;
         this.transitionProgress = 0;
         this.toastTimer = 0;
+        this.activeZone = this.baseZones[0];
+        this.currentLaneColor = this.activeZone.path.getHex();
     }
 
     spawnParticles(x, y, z, c, n = 8, v = 1, t = 'pop') {
@@ -95,14 +97,17 @@ class GameManager {
         pathMesh.rotation.x = -Math.PI / 2;
         this.scene.add(groundMesh, pathMesh);
 
-        [-1.25, 1.25].forEach(x => {
-            const lane = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.02, CONFIG.WORLD.DEPTH), new THREE.MeshBasicMaterial({ color: 0xffddaa, transparent: true, opacity: 0.4 }));
+        const laneGeo = new THREE.BoxGeometry(0.1, 0.02, CONFIG.WORLD.DEPTH);
+        const laneMat = new THREE.MeshBasicMaterial({ color: 0xffddaa, transparent: true, opacity: 0.4 });
+        for (const x of [-1.25, 1.25]) {
+            const lane = new THREE.Mesh(laneGeo, laneMat);
             lane.position.set(x, 0.02, 0);
             this.scene.add(lane);
-        });
+        }
     }
 
     handleKeyDown(event) {
+        if (this.audio.ctx?.state === 'suspended') this.audio.ctx.resume();
         if (!this.isRunning) return;
         if (this.player.isDead) {
             if (event.code === 'KeyR') window.location.reload();
@@ -129,6 +134,7 @@ class GameManager {
         this.ui.initHearts(this.player.lives);
         this.ui.updateLives(this.player.lives);
         this.speedScaleFactor = 0.05 - (upgrades.slow_start.level * 0.008);
+        this.coinBonusChance = CONFIG.EFFECTS.COIN_MULTIPLIER_CHANCE * upgrades.coin_multiplier.level;
     }
 
     startGame() {
@@ -165,7 +171,6 @@ class GameManager {
             return;
         }
         this.updatePhysics(t, dt);
-        this.spawner.syncInstances();
         this.renderer.render(this.scene, this.camera);
     }
 
@@ -184,6 +189,8 @@ class GameManager {
             this.prevZoneIdx = this.currentZoneIdx % this.baseZones.length;
             this.currentZoneIdx = zid;
             const nextIdx = zid % this.baseZones.length;
+            this.activeZone = this.baseZones[nextIdx];
+            this.currentLaneColor = this.activeZone.path.getHex();
 
             this.isTransitioningZone = true;
             this.transitionProgress = 0;
@@ -202,7 +209,6 @@ class GameManager {
             if (this.scene.background) this.scene.background.lerpColors(from.bg, to.bg, p);
             if (this.groundMat.color) this.groundMat.color.lerpColors(from.ground, to.ground, p);
             if (this.pathMat.color) this.pathMat.color.lerpColors(from.path, to.path, p);
-            if (this.spawner.rockMat?.color) this.spawner.rockMat.color.lerpColors(from.rock, to.rock, p);
 
             if (p >= 1.0) this.isTransitioningZone = false;
         }
@@ -217,7 +223,7 @@ class GameManager {
         const cameraLerp = 1 - Math.pow(1 - 0.1, dt);
         this.camera.position.x += (playerPos.x * 0.5 - this.camera.position.x) * cameraLerp;
 
-        this.player.update(this.gameSpeed, t, this, dt);
+        this.player.update(this.gameSpeed, t, dt);
         this.spawner.update(t, dt);
         this.particles.update(this.gameSpeed, dt);
     }

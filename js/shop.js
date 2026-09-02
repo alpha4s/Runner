@@ -1,8 +1,13 @@
 import { CONFIG } from './config.js';
 
+const SPEED_TIERS = [
+    { mult: 1.0, unlock: 0, id: 'btn-speed-1' },
+    { mult: 1.5, unlock: 4500, id: 'btn-speed-15' },
+    { mult: 2.0, unlock: 9000, id: 'btn-speed-2' }
+];
+
 export class ShopManager {
-    constructor(ui, audio) {
-        this.ui = ui;
+    constructor(audio) {
         this.audio = audio;
         this.mainMenuUI = document.getElementById('main-menu');
         this.shopUI = document.getElementById('shop-ui');
@@ -14,9 +19,7 @@ export class ShopManager {
         this.btnShop = document.getElementById('btn-shop');
         this.btnShopBack = document.getElementById('btn-shop-back');
         this.btnReset = document.getElementById('btn-reset');
-        this.btnSpeed1 = document.getElementById('btn-speed-1');
-        this.btnSpeed15 = document.getElementById('btn-speed-15');
-        this.btnSpeed2 = document.getElementById('btn-speed-2');
+        this.speedBtns = SPEED_TIERS.map(s => ({ ...s, el: document.getElementById(s.id) }));
         this.btnSound = document.getElementById('btn-sound');
         this.menuHighScore = document.getElementById('menu-high-score');
         this.menuMaxDist = document.getElementById('menu-max-dist');
@@ -59,14 +62,8 @@ export class ShopManager {
             }
         });
 
-        const speeds = [
-            { btn: this.btnSpeed1, mult: 1.0, unlock: 0 },
-            { btn: this.btnSpeed15, mult: 1.5, unlock: 4500 },
-            { btn: this.btnSpeed2, mult: 2.0, unlock: 9000 }
-        ];
-
-        speeds.forEach(({ btn, mult, unlock }) => {
-            btn.addEventListener('click', () => {
+        this.speedBtns.forEach(({ el, mult, unlock }) => {
+            el.addEventListener('click', () => {
                 if (this.lifetimeStats.topDist >= unlock) {
                     this.startSpeedMult = mult;
                     localStorage.setItem('neon_runner_speed', String(mult));
@@ -120,22 +117,11 @@ export class ShopManager {
         this.menuMaxDist.textContent = `${this.lifetimeStats.topDist | 0}m`;
         this.menuMaxCoins.textContent = this.lifetimeStats.topCoins.toLocaleString();
 
-        const speeds = [1, 1.5, 2];
-        const speedBtns = [this.btnSpeed1, this.btnSpeed15, this.btnSpeed2];
-
-        speeds.forEach((m, i) => {
-            const btn = speedBtns[i];
-            const unlockDist = (m - 1) * 9000;
-            const isUnlocked = this.lifetimeStats.topDist >= unlockDist;
-            if (!isUnlocked) {
-                btn.textContent = `🔒 ${m.toFixed(1)}X`;
-                btn.style.background = "#0008";
-                btn.style.color = "#777";
-            } else {
-                btn.textContent = `${m.toFixed(1)}X`;
-                btn.style.background = this.startSpeedMult === m ? "#4caf50cc" : "#fff1";
-                btn.style.color = "#fff";
-            }
+        this.speedBtns.forEach(({ el, mult, unlock }) => {
+            const isUnlocked = this.lifetimeStats.topDist >= unlock;
+            el.textContent = isUnlocked ? `${mult.toFixed(1)}X` : `🔒 ${mult.toFixed(1)}X`;
+            el.style.background = !isUnlocked ? '#0008' : (this.startSpeedMult === mult ? '#4caf50cc' : '#fff1');
+            el.style.color = isUnlocked ? '#fff' : '#777';
         });
 
         this.btnSound.textContent = `SOUND: ${this.isSoundEnabled ? 'ON' : 'OFF'}`;

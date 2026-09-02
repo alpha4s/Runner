@@ -1,7 +1,5 @@
 import { CONFIG } from './config.js';
 
-const POWERUP_KEYS = ['shield', 'magnet'];
-
 export class Player {
     constructor(scene, ui, gm) {
         this.scene = scene;
@@ -20,22 +18,18 @@ export class Player {
         this.mesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), this.mat);
         this.mesh.position.y = 0.5;
 
-        const size = 32;
-        const shadowData = new Uint8Array(size * size * 4);
-        const half = size / 2;
-        for (let y = 0; y < size; y++) {
-            for (let x = 0; x < size; x++) {
-                const dist = Math.hypot(x - half, y - half) / half;
-                const i = (y * size + x) * 4;
-                shadowData[i + 3] = Math.max(0, 1 - dist) * 128;
-            }
-        }
-        const shadowTex = new THREE.DataTexture(shadowData, size, size, THREE.RGBAFormat);
-        shadowTex.needsUpdate = true;
+        const c = document.createElement('canvas');
+        c.width = c.height = 32;
+        const ctx = c.getContext('2d');
+        const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        g.addColorStop(0, 'rgba(0,0,0,0.6)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 32, 32);
 
         this.shadow = new THREE.Mesh(
             new THREE.PlaneGeometry(2.5, 2.5),
-            new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: 0.6, depthWrite: false })
+            new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, opacity: 0.6, depthWrite: false })
         );
         this.shadow.rotation.x = -Math.PI / 2;
         this.shadow.position.y = 0.05;
@@ -48,8 +42,10 @@ export class Player {
         this.currentGravity = CONFIG.GAMEPLAY.GRAVITY;
         this.lives = 3;
         this.powers = { shield: 0, magnet: 0 };
+        this.maxDurations = { shield: 1, magnet: 1 };
         this.isDead = false;
         this.flashTimer = 0;
+        this.flashColor = 0xff0000;
     }
 
     setLane(lane) {
@@ -106,26 +102,26 @@ export class Player {
     }
 
     activatePowerup(t) {
-        if (t === 'heart') { this.heal(); return; }
-        const bonus = this.gm.shopManager.upgrades[t + '_duration'].level * CONFIG.POWERUPS.LEVEL_BONUS;
-        this.powers[t] = CONFIG.POWERUPS.BASE_DURATION + bonus;
+        if (t === 'heart') return this.heal();
+        const duration = CONFIG.POWERUPS.BASE_DURATION + this.gm.shopManager.upgrades[t + '_duration'].level * CONFIG.POWERUPS.LEVEL_BONUS;
+        this.powers[t] = this.maxDurations[t] = duration;
     }
 
     tickPowerup(t, dt) {
         if (this.powers[t] <= 0) return;
-        const totalDuration = CONFIG.POWERUPS.BASE_DURATION + (this.gm.shopManager.upgrades[t + '_duration'].level * CONFIG.POWERUPS.LEVEL_BONUS);
         const prev = this.powers[t];
         this.powers[t] = Math.max(0, this.powers[t] - dt);
-        this.ui.updatePowerup(t, this.powers[t] > 0, (this.powers[t] / totalDuration) * 100);
+        this.ui.updatePowerup(t, this.powers[t] > 0, (this.powers[t] / this.maxDurations[t]) * 100);
         if (prev > 0 && this.powers[t] === 0) this.gm.audio.playPowerupEnd();
     }
 
     flash(color) {
+        this.flashColor = color;
         this.mat.emissive.setHex(color);
         this.flashTimer = CONFIG.EFFECTS.FLASH_DURATION;
     }
 
-    update(gameSpeed, time, gameManager, dt) {
+    update(gameSpeed, time, dt) {
         const laneSwapLerp = 1 - Math.pow(1 - CONFIG.GAMEPLAY.LANE_SWAP_SPEED, dt);
         this.mesh.position.x += (this.targetX - this.mesh.position.x) * laneSwapLerp;
         this.shadow.position.x = this.mesh.position.x;
@@ -134,8 +130,8 @@ export class Player {
         this.shadow.scale.set(jumpScale, jumpScale, 1);
         this.shadow.material.opacity = 0.6 * jumpScale;
 
-        const activeZone = this.gm.baseZones[this.gm.currentZoneIdx % this.gm.baseZones.length];
-        const laneColor = activeZone.path.getHex();
+        const activeZone = this.gm.activeZone;
+        const laneColor = this.gm.pathMat ? this.gm.pathMat.color.getHex() : this.gm.currentLaneColor;
 
         if (this.isJumping) {
             this.mesh.position.y += this.jumpVelocity * dt;
@@ -154,12 +150,13 @@ export class Player {
         }
 
         this.mesh.rotation.x -= gameSpeed * 0.65 * dt;
-        POWERUP_KEYS.forEach(k => this.tickPowerup(k, dt));
+        this.tickPowerup('shield', dt);
+        this.tickPowerup('magnet', dt);
 
         let emissiveColor = 0x005577, emissiveIntensity = 1.0;
         if (this.flashTimer > 0) {
             this.flashTimer = Math.max(0, this.flashTimer - dt);
-            emissiveColor = 0xffffff;
+            emissiveColor = this.flashColor;
             emissiveIntensity = 10.0;
         } else if (this.powers.shield > 0) {
             emissiveColor = (time % 400 < 200) ? 0x00f3ff : 0x005577;

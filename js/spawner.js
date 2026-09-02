@@ -8,9 +8,30 @@ const HITBOX_MAP = {
     sObs: { hitboxW: 1.1, hitboxH: 0.5, hitboxD: 0.5 },
     tObs: { hitboxW: 1.1, hitboxH: 1.5, hitboxD: 0.5 },
     traffic: { hitboxW: 0.9, hitboxH: 0.6, hitboxD: 1.25 },
-    ramp: { triggerTimer: 0, collider: 'sphere', radius: 1.2, sY: 0.2, tY: 0.05 },
-    laser: { timer: 0, hitboxW: 5.0, hitboxH: 0.5, hitboxD: 0.4, bY: 0 }
+    ramp: { triggerTimer: 0, collider: 'sphere', radius: 1.2, rampSpringScaleY: 0.2, rampTopY: 0.05 },
+    laser: { timer: 0, hitboxW: 5.0, hitboxH: 0.5, hitboxD: 0.4, laserBeamY: 0 }
 };
+
+class GameEntity {
+    constructor(key, isPowerup, idx) {
+        this.position = {
+            x: 0, y: 0, z: 0,
+            set(x, y, z) { this.x = x; this.y = y; this.z = z; }
+        };
+        this.visible = true;
+        this.userData = {
+            type: key,
+            isPowerup,
+            i: idx,
+            isDamaging: (key !== 'coin' && key !== 'ramp' && !isPowerup),
+            ...(HITBOX_MAP[key] ? { ...HITBOX_MAP[key] } : {})
+        };
+        if (key === 'laser') {
+            this.userData.laserSpeed = 0.8 + Math.random();
+            this.userData.laserTop = Math.random() > 0.5;
+        }
+    }
+}
 
 export class Spawner {
     constructor(scene, player, gm) {
@@ -24,7 +45,7 @@ export class Spawner {
         this.pools = {};
         this.idx = { coin: 0, heart: 0, shield: 0, magnet: 0, sObs: 0, tObs: 0, traffic: 0, ramp: 0, laser: 0 };
         this.activePatterns = ['COIN_LINE', 'WALL_GAP', 'TRIPLE_SHORT_WALL', 'ZIG_ZAG_COINS', 'TRIPLE_WALL', 'V_SHAPE', 'RAMP_JUMP'];
-        this.lastDifficultyThresh = 0;
+        this.difficultyIdx = 0;
         this.laneArr = [-1, 0, 1];
         this.powerupTypes = ['heart', 'shield', 'magnet'];
 
@@ -37,15 +58,15 @@ export class Spawner {
     }
 
     prewarmPools() {
-        Object.entries(CONFIG.ENTITY_DEFS).forEach(([key, def]) => {
-            this.pools[key] = [];
+        for (const [key, def] of Object.entries(CONFIG.ENTITY_DEFS)) {
+            const pool = this.pools[key] = [];
+            const isPowerup = POWERUP_SET.has(key);
             for (let i = 0; i < def.size; i++) {
-                const ent = this.spawnEntity(key, 0, -1000);
+                const ent = new GameEntity(key, isPowerup, this.idx[key]++);
                 ent.visible = false;
-                this.entityCount--;
-                this.pools[key].push(ent);
+                pool.push(ent);
             }
-        });
+        }
     }
 
     _getFromPool(key) {
@@ -60,12 +81,10 @@ export class Spawner {
 
     _addToEntities(ent, x, y, z) {
         ent.position.set(x, y, z);
-        ent.updateMatrix();
         this.entities[this.entityCount++] = ent;
         return ent;
     }
 
-    get noiseTex() { return this.scenery.noiseTexture; }
     get glowTexture() { return this.meshes.glowTexture; }
 
     scrollCells(speed, biomeName) {
@@ -86,30 +105,18 @@ export class Spawner {
         const isPowerup = POWERUP_SET.has(entityKey);
 
         if (!entity) {
-            entity = new THREE.Object3D();
-            const i = this.idx[entityKey]++;
-            entity.userData = {
-                type: entityKey,
-                isPowerup,
-                i,
-                isDamaging: (entityKey !== 'coin' && entityKey !== 'ramp' && !isPowerup),
-                ...(HITBOX_MAP[entityKey] ? { ...HITBOX_MAP[entityKey] } : {})
-            };
-            if (entityKey === 'laser') {
-                entity.userData.sM = 0.8 + Math.random();
-                entity.userData.iT = Math.random() > 0.5;
-            }
+            entity = new GameEntity(entityKey, isPowerup, this.idx[entityKey]++);
         }
 
         let y = entityKey === 'coin' && isFloating ? 2.5 : (Y_MAP[entityKey] ?? (isPowerup ? 1.0 : 0.5));
         if (entityKey === 'ramp') {
-            Object.assign(entity.userData, { triggerTimer: 0, tY: 0.05, sY: 0.2 });
+            Object.assign(entity.userData, { triggerTimer: 0, rampTopY: 0.05, rampSpringScaleY: 0.2 });
         }
         if (entityKey === 'laser') {
             entity.userData.timer = 0;
-            entity.userData.sM = 0.8 + Math.random();
-            entity.userData.iT = Math.random() > 0.5;
-            entity.userData.bY = entity.userData.iT ? 1.2 : -0.5;
+            entity.userData.laserSpeed = 0.8 + Math.random();
+            entity.userData.laserTop = Math.random() > 0.5;
+            entity.userData.laserBeamY = entity.userData.laserTop ? 1.2 : -0.5;
         }
 
         const x = entityKey === 'laser' ? 0 : laneIndex * CONFIG.WORLD.LANE_WIDTH;
@@ -120,29 +127,26 @@ export class Spawner {
         const currentDistance = this.gm.distance;
         const patternKey = this.activePatterns[Math.floor(Math.random() * this.activePatterns.length)];
 
-        CONFIG.DIFFICULTY_THRESHOLDS.forEach(threshold => {
-            if (currentDistance > threshold.dist && this.lastDifficultyThresh < threshold.dist) {
-                this.activePatterns.push(...threshold.patterns);
-                this.lastDifficultyThresh = threshold.dist;
-            }
-        });
+        while (this.difficultyIdx < CONFIG.DIFFICULTY_THRESHOLDS.length && currentDistance > CONFIG.DIFFICULTY_THRESHOLDS[this.difficultyIdx].dist) {
+            this.activePatterns.push(...CONFIG.DIFFICULTY_THRESHOLDS[this.difficultyIdx].patterns);
+            this.difficultyIdx++;
+        }
 
-        const pattern = CONFIG.PATTERNS[patternKey];
+        const [spacing, ...elements] = CONFIG.PATTERNS[patternKey];
         const lanes = this.getLanes();
         const speedMultiplier = this.gm.gameSpeed / CONFIG.GAMEPLAY.BASE_SPEED;
         const baseSide = Math.random() > 0.5 ? -1 : 1;
         const laneMapping = { L0: lanes[0], L1: lanes[1], L2: lanes[2], BS: baseSide, SS: -baseSide };
 
-        pattern.elements.forEach(elem => {
-            const lane = laneMapping[elem.lane] ?? elem.lane;
-            const rawZ = elem.randZ ? (Math.random() * elem.randZ - 1) : (elem.z ?? 0);
-            const zOffset = rawZ * speedMultiplier;
-
-            this.spawnEntity(elem.type, lane, this.nextPatternZ + zOffset, elem.high);
-        });
+        for (let i = 0; i < elements.length; i++) {
+            const [type, l, z, high, randZ] = elements[i];
+            const lane = laneMapping[l] ?? l;
+            const rawZ = randZ ? (Math.random() * randZ - 1) : (z || 0);
+            this.spawnEntity(type, lane, this.nextPatternZ + rawZ * speedMultiplier, Boolean(high));
+        }
 
         const safetyBuffer = 10 + (Math.random() * 5);
-        this.nextPatternZ -= (pattern.spacing * speedMultiplier + safetyBuffer + (Math.random() * Math.max(5, 30 - currentDistance / 320)));
+        this.nextPatternZ -= (spacing * speedMultiplier + safetyBuffer + (Math.random() * Math.max(5, 30 - currentDistance / 320)));
     }
 
     update(timestamp, dt) {
@@ -188,6 +192,8 @@ export class Spawner {
             this.nextPatternZ -= 15 * (this.gm.gameSpeed / CONFIG.GAMEPLAY.BASE_SPEED);
             this.nextPowerupDistance += CONFIG.GAMEPLAY.POWERUP_SPAWN_INTERVAL;
         }
+
+        this.syncInstances();
     }
 
     syncInstances() {
@@ -201,21 +207,21 @@ export class Spawner {
         if (ud.type === 'ramp' && ud.triggerTimer > 0) {
             ud.triggerTimer = Math.max(0, ud.triggerTimer - dt);
             if (ud.triggerTimer > 26) {
-                ud.tY = Math.min(ud.tY + 0.5 * dt, 1.0);
-                ud.sY = Math.min(ud.sY + 1.2 * dt, 2.0);
+                ud.rampTopY = Math.min(ud.rampTopY + 0.5 * dt, 1.0);
+                ud.rampSpringScaleY = Math.min(ud.rampSpringScaleY + 1.2 * dt, 2.0);
             } else {
                 const lerpFactor = 1 - Math.pow(1 - 0.15, dt);
-                ud.tY += (0.05 - ud.tY) * lerpFactor;
-                ud.sY += (0.2 - ud.sY) * lerpFactor;
+                ud.rampTopY += (0.05 - ud.rampTopY) * lerpFactor;
+                ud.rampSpringScaleY += (0.2 - ud.rampSpringScaleY) * lerpFactor;
             }
         } else if (ud.type === 'laser') {
-            ud.timer += ud.sM * (this.gm.gameSpeed / CONFIG.GAMEPLAY.BASE_SPEED) * dt;
+            ud.timer += ud.laserSpeed * (this.gm.gameSpeed / CONFIG.GAMEPLAY.BASE_SPEED) * dt;
             if (ud.timer > CONFIG.EFFECTS.LASER_MAX_TIMER) {
                 ud.timer = 0;
-                ud.iT = !ud.iT;
+                ud.laserTop = !ud.laserTop;
             }
             const lerpFactor = 1 - Math.pow(1 - 0.3, dt);
-            ud.bY += ((ud.iT ? 1.2 : -0.5) - ud.bY) * lerpFactor;
+            ud.laserBeamY += ((ud.laserTop ? 1.2 : -0.5) - ud.laserBeamY) * lerpFactor;
         }
 
         if (ud.type === 'coin' && this.player.powers.magnet > 0) {
@@ -241,7 +247,7 @@ export class Spawner {
 
         if (ud.hitboxW !== undefined) {
             if (dz >= ud.hitboxD) return false;
-            const targetY = ud.bY !== undefined ? pos.y + ud.bY : pos.y;
+            const targetY = ud.laserBeamY !== undefined ? pos.y + ud.laserBeamY : pos.y;
             if (Math.abs(playerY - targetY) >= ud.hitboxH + 0.25) return false;
             return ud.type === 'laser' || Math.abs(playerX - pos.x) < ud.hitboxW;
         }
@@ -256,8 +262,7 @@ export class Spawner {
         const { x, y, z } = entity.position;
 
         if (ud.type === 'coin') {
-            const chance = CONFIG.EFFECTS.COIN_MULTIPLIER_CHANCE * this.gm.shopManager.upgrades.coin_multiplier.level;
-            this.gm.state.coins += (Math.random() < chance ? 2 : 1);
+            this.gm.state.coins += (Math.random() < this.gm.coinBonusChance ? 2 : 1);
             this.gm.spawnParticles(x, y, z, 0xffd700, 8, 0.5);
             this.gm.audio.playCoin();
         } else if (ud.isPowerup) {
@@ -285,7 +290,6 @@ export class Spawner {
 
     recycleEntity(entity) {
         entity.visible = false;
-        this.meshes.hide(entity);
         const key = entity.userData.poolKey || entity.userData.type;
         (this.pools[key] ??= []).push(entity);
     }

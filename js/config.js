@@ -71,244 +71,31 @@ export const CONFIG = {
         'INFERNAL HELL': { trunk: 0x3A2020, foliage: 0x882200, rock: 0x554444, bush: 0x663300, grass: 0x554422 }
     },
     PATTERNS: {
-        COIN_LINE: {
-            spacing: 20,
-            elements: [
-                { type: 'coin', lane: 'L0', z: 0 },
-                { type: 'coin', lane: 'L0', z: -2 },
-                { type: 'coin', lane: 'L0', z: -4 },
-                { type: 'coin', lane: 'L0', z: -6 },
-                { type: 'coin', lane: 'L0', z: -8 }
-            ]
-        },
-        ZIG_ZAG_COINS: {
-            spacing: 25,
-            elements: [
-                { type: 'coin', lane: -1, z: 0 },
-                { type: 'coin', lane: 0, z: -3 },
-                { type: 'coin', lane: 1, z: -6 },
-                { type: 'coin', lane: 0, z: -9 },
-                { type: 'coin', lane: -1, z: -12 }
-            ]
-        },
-        TRIPLE_SHORT_WALL: {
-            spacing: 15,
-            elements: [
-                { type: 'sObs', lane: 'L0', z: 0 },
-                { type: 'sObs', lane: 'L1', z: 0 },
-                { type: 'sObs', lane: 'L2', z: 0 },
-                { type: 'coin', lane: 'L1', z: 0, high: true }
-            ]
-        },
-        WALL_GAP: {
-            spacing: 25,
-            elements: [
-                { type: 'sObs', lane: 'L0', z: 0 },
-                { type: 'coin', lane: 'L0', z: 0, high: true },
-                { type: 'sObs', lane: 'L1', randZ: 2 }
-            ]
-        },
-        JUMP_TRAP: {
-            spacing: 20,
-            elements: [
-                { type: 'sObs', lane: 'L0', z: 0 },
-                { type: 'coin', lane: 'L0', z: 0, high: true },
-                { type: 'coin', lane: 'L0', z: -3 },
-                { type: 'coin', lane: 'L0', z: -5 }
-            ]
-        },
-        TALL_WALL_MIX: {
-            spacing: 25,
-            elements: [
-                { type: 'tObs', lane: 'L0', z: 0 },
-                { type: 'sObs', lane: 'L1', randZ: 2 },
-                { type: 'coin', lane: 'L1', randZ: 2, high: true }
-            ]
-        },
-        DOUBLE_WALL: {
-            spacing: 25,
-            elements: [
-                { type: 'tObs', lane: 'L0', z: 0 },
-                { type: 'sObs', lane: 'L1', z: 0 },
-                { type: 'coin', lane: 'L1', z: 0, high: true }
-            ]
-        },
-        CORRIDOR: {
-            spacing: 40,
-            elements: [
-                { type: 'sObs', lane: 'L0', z: 0 },
-                { type: 'sObs', lane: 'L1', z: 2 },
-                { type: 'coin', lane: 'L2', z: 0 },
-                { type: 'sObs', lane: 'L0', z: -10 },
-                { type: 'sObs', lane: 'L1', z: -8 },
-                { type: 'coin', lane: 'L2', z: -10 },
-                { type: 'sObs', lane: 'L0', z: -20 },
-                { type: 'sObs', lane: 'L1', z: -18 },
-                { type: 'coin', lane: 'L2', z: -20 }
-            ]
-        },
-        TRIPLE_WALL: {
-            spacing: 25,
-            elements: [
-                { type: 'tObs', lane: 'L0', z: 0 },
-                { type: 'tObs', lane: 'L1', z: 0 },
-                { type: 'sObs', lane: 'L2', z: 0 },
-                { type: 'coin', lane: 'L2', z: 0, high: true }
-            ]
-        },
-        V_SHAPE: {
-            spacing: 25,
-            elements: [
-                { type: 'sObs', lane: -1, z: 0 },
-                { type: 'sObs', lane: 1, z: 0 },
-                { type: 'coin', lane: 'BS', z: 0, high: true },
-                { type: 'tObs', lane: 0, z: -10 },
-                { type: 'tObs', lane: 'BS', z: -10 },
-                { type: 'coin', lane: 'SS', z: -10 }
-            ]
-        },
-        DIAMOND_COINS: {
-            spacing: 20,
-            elements: [
-                { type: 'coin', lane: 0, z: 0 },
-                { type: 'coin', lane: -1, z: -3 },
-                { type: 'coin', lane: 1, z: -3 },
-                { type: 'coin', lane: 0, z: -6 }
-            ]
-        },
-        TIGHT_CORNER: {
-            spacing: 30,
-            elements: [
-                { type: 'tObs', lane: 'L0', z: 0 },
-                { type: 'tObs', lane: 'L1', z: 0 },
-                { type: 'coin', lane: 'L2', z: 0 },
-                { type: 'tObs', lane: 'L2', z: -9 },
-                { type: 'tObs', lane: 'L1', z: -9 },
-                { type: 'coin', lane: 'L0', z: -9 }
-            ]
-        },
-        X_CROSSING: {
-            spacing: 25,
-            elements: [
-                { type: 'sObs', lane: -1, z: 0 },
-                { type: 'sObs', lane: 1, z: 0 },
-                { type: 'coin', lane: 0, z: 0 },
-                { type: 'tObs', lane: 0, z: -8 },
-                { type: 'coin', lane: -1, z: -8 },
-                { type: 'coin', lane: 1, z: -8 }
-            ]
-        },
-        DEATH_TRAP: {
-            spacing: 30,
-            elements: [
-                { type: 'tObs', lane: -1, z: 0 },
-                { type: 'tObs', lane: 1, z: 0 },
-                { type: 'sObs', lane: 0, z: 0 },
-                { type: 'tObs', lane: 0, z: -6 },
-                { type: 'sObs', lane: 'L1', z: -6 }
-            ]
-        },
-        RAMP_JUMP: {
-            spacing: 25,
-            elements: [
-                { type: 'ramp', lane: 'L0', z: 0 },
-                { type: 'tObs', lane: 'L0', z: -8 },
-                { type: 'coin', lane: 'L0', z: -3 },
-                { type: 'coin', lane: 'L0', z: -6 }
-            ]
-        },
-        TRAFFIC_JAM: {
-            spacing: 25,
-            elements: [
-                { type: 'traffic', lane: 'L0', z: -20 },
-                { type: 'sObs', lane: 'L1', z: 0 },
-                { type: 'coin', lane: 'L2', z: -5 }
-            ]
-        },
-        LASER_GATE: {
-            spacing: 25,
-            elements: [
-                { type: 'laser', lane: 0, z: 0 },
-                { type: 'coin', lane: 0, z: -3 }
-            ]
-        },
-        FULL_BLOCK: {
-            spacing: 30,
-            elements: [
-                { type: 'tObs', lane: -1, z: 0 },
-                { type: 'tObs', lane: 1, z: 0 },
-                { type: 'laser', lane: 0, z: 0 }
-            ]
-        },
-        TRIPLE_TRAFFIC: {
-            spacing: 50,
-            elements: [
-                { type: 'traffic', lane: 'L0', z: -20 },
-                { type: 'traffic', lane: 'L1', z: -30 },
-                { type: 'traffic', lane: 'L2', z: -40 }
-            ]
-        },
-        ZIG_ZAG_TERROR: {
-            spacing: 35,
-            elements: [
-                { type: 'tObs', lane: -1, z: 0 },
-                { type: 'tObs', lane: 0, z: 0 },
-                { type: 'coin', lane: 1, z: 0 },
-                { type: 'tObs', lane: 1, z: -8 },
-                { type: 'tObs', lane: 0, z: -8 },
-                { type: 'coin', lane: -1, z: -8 },
-                { type: 'tObs', lane: -1, z: -16 },
-                { type: 'tObs', lane: 0, z: -16 },
-                { type: 'coin', lane: 1, z: -16 }
-            ]
-        },
-        LASER_STAIRS: {
-            spacing: 40,
-            elements: [
-                { type: 'laser', lane: 0, z: 0 },
-                { type: 'sObs', lane: -1, z: -12 },
-                { type: 'sObs', lane: 1, z: -12 },
-                { type: 'sObs', lane: 0, z: -12 },
-                { type: 'laser', lane: 0, z: -24 }
-            ]
-        },
-        TRAFFIC_WEAVE: {
-            spacing: 40,
-            elements: [
-                { type: 'traffic', lane: 'L0', z: -20 },
-                { type: 'traffic', lane: 'L1', z: -28 },
-                { type: 'coin', lane: 'L2', z: -25 }
-            ]
-        },
-        RAMP_OVER_LASER: {
-            spacing: 30,
-            elements: [
-                { type: 'ramp', lane: 'L0', z: 0 },
-                { type: 'laser', lane: 0, z: -5 },
-                { type: 'tObs', lane: 'L0', z: -12 },
-                { type: 'coin', lane: 'L1', z: -10 }
-            ]
-        },
-        TIGHTROPE: {
-            spacing: 25,
-            elements: [
-                { type: 'tObs', lane: -1, z: 0 },
-                { type: 'tObs', lane: 1, z: 0 },
-                { type: 'sObs', lane: 0, z: 0 },
-                { type: 'tObs', lane: -1, z: -12 },
-                { type: 'tObs', lane: 1, z: -12 },
-                { type: 'sObs', lane: 0, z: -12 },
-                { type: 'coin', lane: 0, z: -6 }
-            ]
-        },
-        DOUBLE_LASER_JUMP: {
-            spacing: 20,
-            elements: [
-                { type: 'laser', lane: 0, z: 0 },
-                { type: 'laser', lane: 0, z: -8 },
-                { type: 'coin', lane: 0, z: -4 }
-            ]
-        }
+        COIN_LINE: [20, ['coin', 'L0', 0], ['coin', 'L0', -2], ['coin', 'L0', -4], ['coin', 'L0', -6], ['coin', 'L0', -8]],
+        ZIG_ZAG_COINS: [25, ['coin', -1, 0], ['coin', 0, -3], ['coin', 1, -6], ['coin', 0, -9], ['coin', -1, -12]],
+        TRIPLE_SHORT_WALL: [15, ['sObs', 'L0', 0], ['sObs', 'L1', 0], ['sObs', 'L2', 0], ['coin', 'L1', 0, 1]],
+        WALL_GAP: [25, ['sObs', 'L0', 0], ['coin', 'L0', 0, 1], ['sObs', 'L1', 0, 0, 2]],
+        JUMP_TRAP: [20, ['sObs', 'L0', 0], ['coin', 'L0', 0, 1], ['coin', 'L0', -3], ['coin', 'L0', -5]],
+        TALL_WALL_MIX: [25, ['tObs', 'L0', 0], ['sObs', 'L1', 0, 0, 2], ['coin', 'L1', 0, 1, 2]],
+        DOUBLE_WALL: [25, ['tObs', 'L0', 0], ['sObs', 'L1', 0], ['coin', 'L1', 0, 1]],
+        CORRIDOR: [40, ['sObs', 'L0', 0], ['sObs', 'L1', 2], ['coin', 'L2', 0], ['sObs', 'L0', -10], ['sObs', 'L1', -8], ['coin', 'L2', -10], ['sObs', 'L0', -20], ['sObs', 'L1', -18], ['coin', 'L2', -20]],
+        TRIPLE_WALL: [25, ['tObs', 'L0', 0], ['tObs', 'L1', 0], ['sObs', 'L2', 0], ['coin', 'L2', 0, 1]],
+        V_SHAPE: [25, ['sObs', -1, 0], ['sObs', 1, 0], ['coin', 'BS', 0, 1], ['tObs', 0, -10], ['tObs', 'BS', -10], ['coin', 'SS', -10]],
+        DIAMOND_COINS: [20, ['coin', 0, 0], ['coin', -1, -3], ['coin', 1, -3], ['coin', 0, -6]],
+        TIGHT_CORNER: [30, ['tObs', 'L0', 0], ['tObs', 'L1', 0], ['coin', 'L2', 0], ['tObs', 'L2', -9], ['tObs', 'L1', -9], ['coin', 'L0', -9]],
+        X_CROSSING: [25, ['sObs', -1, 0], ['sObs', 1, 0], ['coin', 0, 0], ['tObs', 0, -8], ['coin', -1, -8], ['coin', 1, -8]],
+        DEATH_TRAP: [30, ['tObs', -1, 0], ['tObs', 1, 0], ['sObs', 0, 0], ['tObs', 0, -6], ['sObs', 'L1', -6]],
+        RAMP_JUMP: [25, ['ramp', 'L0', 0], ['tObs', 'L0', -8], ['coin', 'L0', -3], ['coin', 'L0', -6]],
+        TRAFFIC_JAM: [25, ['traffic', 'L0', -20], ['sObs', 'L1', 0], ['coin', 'L2', -5]],
+        LASER_GATE: [25, ['laser', 0, 0], ['coin', 0, -3]],
+        FULL_BLOCK: [30, ['tObs', -1, 0], ['tObs', 1, 0], ['laser', 0, 0]],
+        TRIPLE_TRAFFIC: [50, ['traffic', 'L0', -20], ['traffic', 'L1', -30], ['traffic', 'L2', -40]],
+        ZIG_ZAG_TERROR: [35, ['tObs', -1, 0], ['tObs', 0, 0], ['coin', 1, 0], ['tObs', 1, -8], ['tObs', 0, -8], ['coin', -1, -8], ['tObs', -1, -16], ['tObs', 0, -16], ['coin', 1, -16]],
+        LASER_STAIRS: [40, ['laser', 0, 0], ['sObs', -1, -12], ['sObs', 1, -12], ['sObs', 0, -12], ['laser', 0, -24]],
+        TRAFFIC_WEAVE: [40, ['traffic', 'L0', -20], ['traffic', 'L1', -28], ['coin', 'L2', -25]],
+        RAMP_OVER_LASER: [30, ['ramp', 'L0', 0], ['laser', 0, -5], ['tObs', 'L0', -12], ['coin', 'L1', -10]],
+        TIGHTROPE: [25, ['tObs', -1, 0], ['tObs', 1, 0], ['sObs', 0, 0], ['tObs', -1, -12], ['tObs', 1, -12], ['sObs', 0, -12], ['coin', 0, -6]],
+        DOUBLE_LASER_JUMP: [20, ['laser', 0, 0], ['laser', 0, -8], ['coin', 0, -4]]
     },
     DIFFICULTY_THRESHOLDS: [
         { dist: 500, patterns: ['DIAMOND_COINS', 'TRAFFIC_JAM'] },

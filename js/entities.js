@@ -1,16 +1,62 @@
 import { CONFIG } from './config.js';
-import { ShadowManager } from './visuals.js';
+
+const SHADOW_TYPES = {
+    TREE: { x: 0, rx: 60, ry: 60, opacity: 0.5, w: 4.5, h: 4.5 },
+    ROCK: { x: 128, rx: 60, ry: 60, opacity: 0.4, w: 5.5, h: 5.5 },
+    DUNE: { x: 256, rx: 60, ry: 60, opacity: 0.35, w: 18.0, h: 26.0 },
+    BLOB: { x: 384, rx: 60, ry: 60, opacity: 0.4, w: 3.0, h: 3.0 }
+};
+
+export class ShadowManager {
+    constructor() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, 512, 128);
+
+        const entries = Object.entries(SHADOW_TYPES);
+        const count = entries.length;
+
+        entries.forEach(([_, t]) => {
+            const grad = ctx.createRadialGradient(t.x + 64, 64, 0, t.x + 64, 64, 64);
+            grad.addColorStop(0, `rgba(0,0,0,${t.opacity})`);
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.ellipse(t.x + 64, 64, t.rx, t.ry, 0, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        this.texture = new THREE.CanvasTexture(canvas);
+        this.material = new THREE.MeshBasicMaterial({
+            map: this.texture, transparent: true, depthWrite: false, opacity: 0.5, blending: THREE.MultiplyBlending
+        });
+
+        this.geos = {};
+        entries.forEach(([k, t], i) => {
+            this.geos[k.toLowerCase()] = this._createGeo(i / count, (i + 1) / count, t.w, t.h);
+        });
+    }
+
+    _createGeo(uStart, uEnd, w, h) {
+        const geo = new THREE.PlaneGeometry(w, h);
+        geo.rotateX(-Math.PI / 2);
+        const uvs = geo.attributes.uv.array;
+        for (let i = 0; i < uvs.length; i += 2) {
+            uvs[i] = uvs[i] === 0 ? uStart : uEnd;
+        }
+        return geo;
+    }
+}
 
 export const POWERUP_COLORS = { heart: 0xff00ff, shield: 0x00f3ff, magnet: 0x00ff00 };
-const RECYCLED_POS = { x: 0, y: -100, z: 0 };
 
 export class EntityMeshManager {
     constructor(scene) {
         this.scene = scene;
         this.shadows = new ShadowManager();
-        this.dummy = new THREE.Object3D();
-        this._v = new THREE.Vector3();
-        this._s = new THREE.Vector3();
 
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = 64;
@@ -145,78 +191,83 @@ export class EntityMeshManager {
             ...Object.values(this.powerInstMeshes), ...Object.values(this.powerGlowMeshes)
         ];
 
+        this.counts = { coin: 0, sObs: 0, tObs: 0, traffic: 0, ramp: 0, laser: 0, heart: 0, shield: 0, magnet: 0, barrierShadow: 0 };
+        this._prevCounts = {};
         this.scene.add(...this.allInstancedMeshes);
     }
 
-    updateMatrix(mesh, idx, p, s = 1, r) {
-        this.dummy.position.copy(p);
-        this.dummy.rotation.set(r ? r.x : 0, r ? r.y : 0, r ? r.z : 0);
-        if (s.x !== undefined) this.dummy.scale.copy(s);
-        else this.dummy.scale.setScalar(s);
-
-        this.dummy.updateMatrix();
-        mesh.setMatrixAt(idx, this.dummy.matrix);
+    setTransform(mesh, idx, x, y, z, sx = 1, sy = sx, sz = sx) {
+        const arr = mesh.instanceMatrix.array;
+        const o = idx * 16;
+        arr[o] = sx;      arr[o + 1] = 0;   arr[o + 2] = 0;   arr[o + 3] = 0;
+        arr[o + 4] = 0;   arr[o + 5] = sy;  arr[o + 6] = 0;   arr[o + 7] = 0;
+        arr[o + 8] = 0;   arr[o + 9] = 0;   arr[o + 10] = sz; arr[o + 11] = 0;
+        arr[o + 12] = x;  arr[o + 13] = y;  arr[o + 14] = z;  arr[o + 15] = 1;
     }
 
     sync(entities, entityCount) {
+        const counts = this.counts;
+        for (const k in counts) counts[k] = 0;
+
         for (let i = 0; i < entityCount; i++) {
             const e = entities[i], ud = e.userData, p = e.position, type = ud.type;
 
-            if (type === 'coin' || ud.isPowerup) {
-                const mesh = type === 'coin' ? this.coinInstMesh : this.powerInstMeshes[type];
-                const glow = type === 'coin' ? this.coinGlowMesh : this.powerGlowMeshes[type];
-                this.updateMatrix(mesh, ud.i, p);
-                this.updateMatrix(glow, ud.i, p, type === 'coin' ? 1.2 : 2.5);
-            } else if (type === 'sObs' || type === 'tObs') {
-                this.updateMatrix(type === 'sObs' ? this.sObsInst : this.tObsInst, ud.i, p);
-                this._v.set(p.x, CONFIG.EFFECTS.SHADOW_Y, p.z);
-                this.updateMatrix(this.barrierShadowInst, ud.i, this._v);
+            if (type === 'coin') {
+                const idx = counts.coin++;
+                this.setTransform(this.coinInstMesh, idx, p.x, p.y, p.z);
+                this.setTransform(this.coinGlowMesh, idx, p.x, p.y, p.z, 1.2);
+            } else if (ud.isPowerup) {
+                const idx = counts[type]++;
+                this.setTransform(this.powerInstMeshes[type], idx, p.x, p.y, p.z);
+                this.setTransform(this.powerGlowMeshes[type], idx, p.x, p.y, p.z, 2.5);
+            } else if (type === 'sObs') {
+                const idx = counts.sObs++;
+                this.setTransform(this.sObsInst, idx, p.x, p.y, p.z);
+                this.setTransform(this.barrierShadowInst, counts.barrierShadow++, p.x, CONFIG.EFFECTS.SHADOW_Y, p.z);
+            } else if (type === 'tObs') {
+                const idx = counts.tObs++;
+                this.setTransform(this.tObsInst, idx, p.x, p.y, p.z);
+                this.setTransform(this.barrierShadowInst, counts.barrierShadow++, p.x, CONFIG.EFFECTS.SHADOW_Y, p.z);
             } else if (type === 'traffic') {
-                this.updateMatrix(this.trafficInst, ud.i, p);
-                this._v.set(p.x, CONFIG.EFFECTS.SHADOW_Y, p.z);
-                this.updateMatrix(this.barrierShadowInst, ud.i + 100, this._v, 1.5);
+                const idx = counts.traffic++;
+                this.setTransform(this.trafficInst, idx, p.x, p.y, p.z);
+                this.setTransform(this.barrierShadowInst, counts.barrierShadow++, p.x, CONFIG.EFFECTS.SHADOW_Y, p.z, 1.5);
             } else if (type === 'ramp') {
-                this._v.set(p.x, p.y - 0.05, p.z);
-                this.updateMatrix(this.rampInst.base, ud.i, this._v);
-                this._v.set(p.x, p.y + ud.tY * 0.4, p.z);
-                this._s.set(1, ud.sY, 1);
-                this.updateMatrix(this.rampInst.spring, ud.i, this._v, this._s);
-                this._v.set(p.x, p.y + ud.tY, p.z);
-                this.updateMatrix(this.rampInst.top, ud.i, this._v);
+                const idx = counts.ramp++;
+                this.setTransform(this.rampInst.base, idx, p.x, p.y - 0.05, p.z);
+                this.setTransform(this.rampInst.spring, idx, p.x, p.y + ud.rampTopY * 0.4, p.z, 1, ud.rampSpringScaleY, 1);
+                this.setTransform(this.rampInst.top, idx, p.x, p.y + ud.rampTopY, p.z);
             } else if (type === 'laser') {
-                this._v.set(p.x - 3.75, p.y, p.z);
-                this.updateMatrix(this.laserInst.pole, ud.i * 2, this._v);
-                this._v.set(p.x + 3.75, p.y, p.z);
-                this.updateMatrix(this.laserInst.pole, ud.i * 2 + 1, this._v);
-                this._v.set(p.x, p.y + ud.bY, p.z);
-                this.updateMatrix(this.laserInst.beam, ud.i, this._v);
+                const idx = counts.laser++;
+                this.setTransform(this.laserInst.pole, idx * 2, p.x - 3.75, p.y, p.z);
+                this.setTransform(this.laserInst.pole, idx * 2 + 1, p.x + 3.75, p.y, p.z);
+                this.setTransform(this.laserInst.beam, idx, p.x, p.y + ud.laserBeamY, p.z);
             }
         }
 
-        for (let i = 0; i < this.allInstancedMeshes.length; i++) {
-            this.allInstancedMeshes[i].instanceMatrix.needsUpdate = true;
-        }
-    }
+        const targets = [
+            [this.coinInstMesh, counts.coin, 'coin'],
+            [this.coinGlowMesh, counts.coin, 'coinGlow'],
+            [this.sObsInst, counts.sObs, 'sObs'],
+            [this.tObsInst, counts.tObs, 'tObs'],
+            [this.trafficInst, counts.traffic, 'traffic'],
+            [this.barrierShadowInst, counts.barrierShadow, 'shadow'],
+            [this.rampInst.base, counts.ramp, 'rampBase'],
+            [this.rampInst.spring, counts.ramp, 'rampSpring'],
+            [this.rampInst.top, counts.ramp, 'rampTop'],
+            [this.laserInst.pole, counts.laser * 2, 'laserPole'],
+            [this.laserInst.beam, counts.laser, 'laserBeam'],
+            ...['heart', 'shield', 'magnet'].flatMap(t => [
+                [this.powerInstMeshes[t], counts[t], t],
+                [this.powerGlowMeshes[t], counts[t], t + 'Glow']
+            ])
+        ];
 
-    hide(entity) {
-        const ud = entity.userData;
-        if (ud.type === 'coin' || ud.isPowerup) {
-            this.updateMatrix(ud.type === 'coin' ? this.coinInstMesh : this.powerInstMeshes[ud.type], ud.i, RECYCLED_POS);
-            this.updateMatrix(ud.type === 'coin' ? this.coinGlowMesh : this.powerGlowMeshes[ud.type], ud.i, RECYCLED_POS);
-        } else if (ud.type === 'sObs' || ud.type === 'tObs') {
-            this.updateMatrix(ud.type === 'sObs' ? this.sObsInst : this.tObsInst, ud.i, RECYCLED_POS);
-            this.updateMatrix(this.barrierShadowInst, ud.i, RECYCLED_POS);
-        } else if (ud.type === 'traffic') {
-            this.updateMatrix(this.trafficInst, ud.i, RECYCLED_POS);
-            this.updateMatrix(this.barrierShadowInst, ud.i + 100, RECYCLED_POS);
-        } else if (ud.type === 'ramp') {
-            this.updateMatrix(this.rampInst.base, ud.i, RECYCLED_POS);
-            this.updateMatrix(this.rampInst.spring, ud.i, RECYCLED_POS);
-            this.updateMatrix(this.rampInst.top, ud.i, RECYCLED_POS);
-        } else if (ud.type === 'laser') {
-            this.updateMatrix(this.laserInst.pole, ud.i * 2, RECYCLED_POS);
-            this.updateMatrix(this.laserInst.pole, ud.i * 2 + 1, RECYCLED_POS);
-            this.updateMatrix(this.laserInst.beam, ud.i, RECYCLED_POS);
+        for (let i = 0; i < targets.length; i++) {
+            const [mesh, count, key] = targets[i];
+            mesh.count = count;
+            if (count > 0 || (this._prevCounts[key] || 0) > 0) mesh.instanceMatrix.needsUpdate = true;
+            this._prevCounts[key] = count;
         }
     }
 }

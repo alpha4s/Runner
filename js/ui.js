@@ -1,13 +1,12 @@
 export class UIManager {
-    constructor(gm) {
-        this.gm = gm;
+    constructor() {
         this.pc = document.getElementById('powerup-container');
         this.healthContainer = document.getElementById('health-right');
         this.hearts = [];
 
         this.pUI = {
-            shield: { s: document.getElementById('shield-status'), b: document.getElementById('shield-bar') },
-            magnet: { s: document.getElementById('magnet-status'), b: document.getElementById('magnet-bar') }
+            shield: { container: document.getElementById('shield-status'), bar: document.getElementById('shield-bar') },
+            magnet: { container: document.getElementById('magnet-status'), bar: document.getElementById('magnet-bar') }
         };
         this.gameOverEl = document.getElementById('game-over');
         this.elScore = document.getElementById('score');
@@ -50,11 +49,11 @@ export class UIManager {
             const stateKey = active ? roundedPct : -1;
             if (this._lastPowerupState[type] !== stateKey) {
                 this._lastPowerupState[type] = stateKey;
-                ui.s.style.display = active ? 'block' : 'none';
-                if (active) ui.b.style.width = `${roundedPct}%`;
+                ui.container.style.display = active ? 'block' : 'none';
+                if (active) ui.bar.style.width = `${roundedPct}%`;
             }
         }
-        const anyActive = this.pUI.shield.s.style.display === 'block' || this.pUI.magnet.s.style.display === 'block';
+        const anyActive = this.pUI.shield.container.style.display === 'block' || this.pUI.magnet.container.style.display === 'block';
         this.pc.style.display = anyActive ? 'flex' : 'none';
     }
 

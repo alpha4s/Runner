@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { ShadowManager } from './visuals.js';
+import { ShadowManager } from './entities.js';
 
 export class SceneryManager {
     constructor(scene, gm) {
@@ -8,6 +8,7 @@ export class SceneryManager {
         this.shadows = new ShadowManager();
         this.cells = [];
         this.glbModels = {};
+        this.sceneryMeshes = [];
 
         const size = 64;
         const data = new Uint8Array(size * size * 4);
@@ -39,47 +40,106 @@ export class SceneryManager {
         this.pebbleGeo = new THREE.BoxGeometry(0.15, 0.05, 0.15);
         this.pebbleMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
 
-        this.duneGeo = new THREE.SphereGeometry(2.0, 16, 16, 0, Math.PI * 2, 0, Math.PI / 3);
-        this.duneGeo.scale(2.0, 0.15, 4.0);
-        this.duneMat = new THREE.MeshStandardMaterial({ color: 0x9b8a68, roughness: 0.8, metalness: 0.2 });
+        const duneW = 24, duneL = 32;
+        this.duneGeo = new THREE.PlaneGeometry(duneW, duneL, 22, 22);
+        this.duneGeo.rotateX(-Math.PI / 2);
+        const posAttr = this.duneGeo.attributes.position;
+        for (let i = 0; i < posAttr.count; i++) {
+            const x = posAttr.getX(i);
+            const z = posAttr.getZ(i);
+            const nx = x / (duneW * 0.5);
+            const nz = z / (duneL * 0.5);
+            const ridgeX = nx - 0.15 * (1 - nz * nz);
+            const r = Math.sqrt(ridgeX * ridgeX + nz * nz);
+            if (r < 1.0) {
+                const h = 2.8 * Math.pow(Math.cos(r * Math.PI * 0.5), 2);
+                posAttr.setY(i, h);
+            } else {
+                posAttr.setY(i, 0);
+            }
+        }
+        this.duneGeo.computeVertexNormals();
 
         this.createCells();
         this.loadGLBModels();
     }
 
     createCells() {
-        const dummy = new THREE.Object3D();
         this.backZ = -CONFIG.WORLD.DEPTH - CONFIG.SPAWNER.CELL_DEPTH;
-        const DECOS = [
-            { key: 'pebbles', geo: this.pebbleGeo, mat: this.pebbleMat, count: CONFIG.SPAWNER.CELL_PEBBLES, shadow: false, visible: true, pos: (z) => ({ x: (Math.random() - 0.5) * 7, y: 0.1, z: z + Math.random() * CONFIG.SPAWNER.CELL_DEPTH, s: 1 }) }
-        ];
+        const NUM_CELLS = CONFIG.SPAWNER.NUM_CELLS;
+        const CELL_DEPTH = CONFIG.SPAWNER.CELL_DEPTH;
 
-        for (let c = 0; c < CONFIG.SPAWNER.NUM_CELLS; c++) {
-            const zStart = -CONFIG.WORLD.DEPTH + (c * CONFIG.SPAWNER.CELL_DEPTH) - CONFIG.SPAWNER.CELL_DEPTH;
-            const cell = { zStart, zEnd: zStart + CONFIG.SPAWNER.CELL_DEPTH, instancedMeshesArray: [], group: new THREE.Group(), currentBiome: null };
-            cell.group.matrixAutoUpdate = false;
-            this.scene.add(cell.group);
+        this.pebbleMesh = new THREE.InstancedMesh(this.pebbleGeo, this.pebbleMat, NUM_CELLS * CONFIG.SPAWNER.CELL_PEBBLES);
+        this.duneMesh = new THREE.InstancedMesh(this.duneGeo, this.gm.groundMat, NUM_CELLS * 2);
+        this.hazeMesh = new THREE.InstancedMesh(this.oceanHazeGeo, this.oceanHazeMat, NUM_CELLS * 3);
 
-            DECOS.forEach(d => {
-                const inst = new THREE.InstancedMesh(d.geo, d.mat, d.count);
-                inst.castShadow = inst.receiveShadow = d.shadow;
-                inst.visible = d.visible;
-                inst.matrixAutoUpdate = false;
-                inst.userData.key = d.key;
-                inst.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 100);
+        this.treeShadowMesh = new THREE.InstancedMesh(this.shadows.geos.tree, this.shadows.material, NUM_CELLS * CONFIG.SPAWNER.CELL_TREES);
+        this.rockShadowMesh = new THREE.InstancedMesh(this.shadows.geos.rock, this.shadows.material, NUM_CELLS * CONFIG.SPAWNER.CELL_ROCKS);
+        this.blobShadowMesh = new THREE.InstancedMesh(this.shadows.geos.blob, this.shadows.material, NUM_CELLS * (CONFIG.SPAWNER.CELL_BUSHES + CONFIG.SPAWNER.CELL_GRASS));
 
-                for (let i = 0; i < d.count; i++) {
-                    const p = d.pos(zStart);
-                    dummy.scale.set(p.s, p.s, p.s);
-                    dummy.position.set(p.x, p.y, p.z);
-                    dummy.updateMatrix();
-                    inst.setMatrixAt(i, dummy.matrix);
-                }
-                cell.group.add(inst);
-                cell.instancedMeshesArray.push(inst);
+        const dummy = new THREE.Object3D();
+
+        this.cells = [];
+        for (let c = 0; c < NUM_CELLS; c++) {
+            const zStart = -CONFIG.WORLD.DEPTH + (c * CELL_DEPTH) - CELL_DEPTH;
+            const cell = {
+                c,
+                zStart,
+                zEnd: zStart + CELL_DEPTH,
+                currentBiome: null,
+                items: []
+            };
+
+            for (let i = 0; i < CONFIG.SPAWNER.CELL_PEBBLES; i++) {
+                const instIdx = c * CONFIG.SPAWNER.CELL_PEBBLES + i;
+                dummy.scale.set(1, 1, 1);
+                dummy.position.set((Math.random() - 0.5) * 7, 0.1, zStart + Math.random() * CELL_DEPTH);
+                dummy.rotation.set(0, 0, 0);
+                dummy.updateMatrix();
+                this.pebbleMesh.setMatrixAt(instIdx, dummy.matrix);
+                cell.items.push({ mesh: this.pebbleMesh, idx: instIdx, baseY: 0.1, category: 'pebbles' });
+            }
+
+            for (let i = 0; i < 2; i++) {
+                const instIdx = c * 2 + i;
+                const s = 0.85 + Math.random() * 0.35;
+                dummy.scale.set(s, s, s);
+                const side = (i === 0) ? -1 : 1;
+                const x = side * (15.5 + Math.random() * 10);
+                const z = zStart + Math.random() * CELL_DEPTH;
+                const rotY = (side > 0 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.4;
+
+                dummy.position.set(x, -999, z);
+                dummy.rotation.set(0, rotY, 0);
+                dummy.updateMatrix();
+                this.duneMesh.setMatrixAt(instIdx, dummy.matrix);
+
+                cell.items.push({ mesh: this.duneMesh, idx: instIdx, baseY: -0.05, category: 'dunes' });
+            }
+
+            const hazeZ = zStart + CELL_DEPTH / 2;
+            [-85, 85, 0].forEach((x, i) => {
+                const instIdx = c * 3 + i;
+                dummy.scale.set(1, 1, 1);
+                dummy.position.set(x, -999, hazeZ);
+                dummy.rotation.set(0, 0, 0);
+                dummy.updateMatrix();
+                this.hazeMesh.setMatrixAt(instIdx, dummy.matrix);
+                cell.items.push({ mesh: this.hazeMesh, idx: instIdx, baseY: 0.1, category: 'ocean_haze' });
             });
+
             this.cells.push(cell);
         }
+
+        this.sceneryMeshes = [
+            this.pebbleMesh, this.duneMesh, this.hazeMesh,
+            this.treeShadowMesh, this.rockShadowMesh, this.blobShadowMesh
+        ];
+
+        this.sceneryMeshes.forEach(m => {
+            m.frustumCulled = false;
+            this.scene.add(m);
+        });
     }
 
     loadGLBModels() {
@@ -124,14 +184,13 @@ export class SceneryManager {
                         const isTrunk = (m === trunkMesh);
                         const role = (def.type === 'tree' || def.type === 'deadTree') ? (isTrunk ? 'trunk' : 'foliage') : def.type;
                         const material = new THREE.MeshLambertMaterial({ color: 0xffffff, map: m.material.map || null });
-                        const color = DEFAULT_COLORS[def.type]?.[role];
-                        if (color !== undefined) material.color.setHex(color);
+                        const defaultColor = DEFAULT_COLORS[def.type]?.[role] ?? 0xffffff;
 
                         const geometry = m.geometry.clone();
                         m.updateMatrixWorld(true);
                         geometry.applyMatrix4(m.matrixWorld);
 
-                        return { geometry, material, role };
+                        return { geometry, material, role, defaultColor };
                     });
 
                     this.glbModels[key] = modelParts;
@@ -147,6 +206,9 @@ export class SceneryManager {
     }
 
     populateCellsWithGLB() {
+        const NUM_CELLS = CONFIG.SPAWNER.NUM_CELLS;
+        const CELL_DEPTH = CONFIG.SPAWNER.CELL_DEPTH;
+
         const layoutCounts = {
             tree1: Math.floor(CONFIG.SPAWNER.CELL_TREES / 2),
             tree2: Math.ceil(CONFIG.SPAWNER.CELL_TREES / 2),
@@ -158,113 +220,124 @@ export class SceneryManager {
         };
 
         const dummy = new THREE.Object3D();
+        const tempColor = new THREE.Color();
+
+        this.glbInstancedMeshes = {};
+        for (const modelKey in this.glbModels) {
+            const parts = this.glbModels[modelKey];
+            const countPerCell = layoutCounts[modelKey] || (modelKey.includes('Tree1') ? layoutCounts.tree1 : layoutCounts.tree2);
+
+            parts.forEach((part, p) => {
+                const key = `${modelKey}_${p}`;
+                const instMesh = new THREE.InstancedMesh(part.geometry, part.material, NUM_CELLS * countPerCell);
+                instMesh.frustumCulled = false;
+                this.glbInstancedMeshes[key] = instMesh;
+                this.sceneryMeshes.push(instMesh);
+                this.scene.add(instMesh);
+            });
+        }
+
+        let treeShadowIdx = 0;
+        let rockShadowIdx = 0;
+        let blobShadowIdx = 0;
 
         this.cells.forEach(cell => {
             const grassBoundaryX = 4.75;
 
             for (const layoutKey in layoutCounts) {
                 const count = layoutCounts[layoutKey];
-                const modelKeys = (layoutKey === 'tree1') ? ['normalTree1', 'deadTree1'] :
-                    (layoutKey === 'tree2') ? ['normalTree2', 'deadTree2'] : [layoutKey];
-
-                const meshes = [];
-                const shadowKey = layoutKey.includes('tree') ? 'tree' : layoutKey.includes('rock') ? 'rock' : 'blob';
-                const shadowInst = new THREE.InstancedMesh(this.shadows.geos[shadowKey], this.shadows.material, count);
-                shadowInst.position.y = 0.06;
-                shadowInst.visible = false;
-                shadowInst.userData.isShadow = true;
-                cell.group.add(shadowInst);
-                cell.instancedMeshesArray.push(shadowInst);
-
-                modelKeys.forEach(modelKey => {
-                    const parts = this.glbModels[modelKey];
-                    let category = modelKey;
-                    if (modelKey.includes('normalTree')) category = 'normalTree';
-                    else if (modelKey.includes('deadTree')) category = 'deadTree';
-                    else if (modelKey.includes('rock')) category = 'rock';
-
-                    parts?.forEach((part, p) => {
-                        const mat = part.material.clone();
-                        mat.userData.role = part.role;
-                        const instMesh = new THREE.InstancedMesh(part.geometry, mat, count);
-                        instMesh.receiveShadow = true;
-                        if (modelKey.startsWith('dead')) instMesh.visible = false;
-                        if (!modelKey.startsWith('dead')) shadowInst.visible = true;
-                        instMesh.userData.key = `${modelKey}_${p}`;
-                        instMesh.userData.category = category;
-                        instMesh.matrixAutoUpdate = false;
-                        cell.group.add(instMesh);
-                        cell.instancedMeshesArray.push(instMesh);
-                        meshes.push(instMesh);
-                    });
-                });
-                shadowInst.matrixAutoUpdate = false;
-                meshes.push(shadowInst);
+                const isTree = layoutKey.includes('tree');
+                const isRock = layoutKey.includes('rock');
+                const isGrass = layoutKey === 'grass';
 
                 for (let i = 0; i < count; i++) {
-                    const isGrass = layoutKey === 'grass';
                     const scale = isGrass ? Math.random() * 1.5 + 2.0 : Math.random() * 1.2 + 0.4;
                     dummy.scale.set(scale, scale, scale);
                     let xPos = (Math.random() - 0.5) * (isGrass ? 100 : 80);
                     const boundary = isGrass ? grassBoundaryX : CONFIG.WORLD.LANE_BUFFER;
                     if (Math.abs(xPos) < boundary) xPos += Math.sign(xPos || 1) * boundary;
 
-                    dummy.position.set(xPos, 0, cell.zStart + Math.random() * CONFIG.SPAWNER.CELL_DEPTH);
-                    dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+                    const zPos = cell.zStart + Math.random() * CELL_DEPTH;
+                    const rotY = Math.random() * Math.PI * 2;
+
+                    let sMesh = null, sIdx = -1;
+                    if (isTree) {
+                        sMesh = this.treeShadowMesh;
+                        sIdx = treeShadowIdx++;
+                    } else if (isRock) {
+                        sMesh = this.rockShadowMesh;
+                        sIdx = rockShadowIdx++;
+                    } else {
+                        sMesh = this.blobShadowMesh;
+                        sIdx = blobShadowIdx++;
+                    }
+
+                    dummy.position.set(xPos, 0.06, zPos);
+                    dummy.rotation.set(0, rotY, 0);
                     dummy.updateMatrix();
+                    sMesh.setMatrixAt(sIdx, dummy.matrix);
 
-                    meshes.forEach(m => m.setMatrixAt(i, dummy.matrix));
+                    const modelKeys = (layoutKey === 'tree1') ? ['normalTree1', 'deadTree1'] :
+                        (layoutKey === 'tree2') ? ['normalTree2', 'deadTree2'] : [layoutKey];
+
+                    modelKeys.forEach(modelKey => {
+                        const parts = this.glbModels[modelKey];
+                        const isDead = modelKey.startsWith('dead');
+                        let category = modelKey;
+                        if (modelKey.includes('normalTree')) category = 'normalTree';
+                        else if (modelKey.includes('deadTree')) category = 'deadTree';
+                        else if (modelKey.includes('rock')) category = 'rock';
+
+                        const instIdx = cell.c * count + i;
+                        dummy.position.set(xPos, isDead ? -999 : 0, zPos);
+                        dummy.rotation.set(0, rotY, 0);
+                        dummy.updateMatrix();
+
+                        parts.forEach((part, p) => {
+                            const key = `${modelKey}_${p}`;
+                            const instMesh = this.glbInstancedMeshes[key];
+                            instMesh.setMatrixAt(instIdx, dummy.matrix);
+
+                            tempColor.setHex(part.defaultColor);
+                            instMesh.setColorAt(instIdx, tempColor);
+
+                            cell.items.push({
+                                mesh: instMesh,
+                                shadowMesh: sMesh,
+                                idx: instIdx,
+                                shadowIdx: sIdx,
+                                baseY: 0,
+                                shadowY: 0.06,
+                                category,
+                                role: part.role
+                            });
+                        });
+                    });
                 }
-
-                const duneCount = 2;
-                const duneInst = new THREE.InstancedMesh(this.duneGeo, this.duneMat, duneCount);
-                const duneShadow = new THREE.InstancedMesh(this.shadows.geos.dune, this.shadows.material, duneCount);
-                duneShadow.position.y = 0.04;
-                duneShadow.rotation.x = -Math.PI / 2;
-
-                duneInst.userData.key = 'dune';
-                duneInst.userData.category = 'dunes';
-                duneInst.visible = false;
-                duneInst.matrixAutoUpdate = duneShadow.matrixAutoUpdate = false;
-
-                for (let i = 0; i < duneCount; i++) {
-                    const s = 1 + Math.random() * 1.5;
-                    dummy.scale.set(s, s, s);
-                    let x = (Math.random() - 0.5) * 120;
-                    if (Math.abs(x) < 20) x += Math.sign(x || 1) * 20;
-                    dummy.position.set(x, -0.4, cell.zStart + Math.random() * CONFIG.SPAWNER.CELL_DEPTH);
-                    dummy.rotation.set(0, Math.random() * Math.PI, 0);
-                    dummy.updateMatrix();
-
-                    duneInst.setMatrixAt(i, dummy.matrix);
-                    duneShadow.setMatrixAt(i, dummy.matrix);
-                }
-                duneInst.geometry.boundingSphere = duneShadow.geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 100);
-                cell.group.add(duneInst, duneShadow);
-                cell.instancedMeshesArray.push(duneInst, duneShadow);
             }
+        });
 
-            const hazeInst = new THREE.InstancedMesh(this.oceanHazeGeo, this.oceanHazeMat, 3);
-            const hazeDummy = new THREE.Object3D();
-            const hazeZ = cell.zStart + CONFIG.SPAWNER.CELL_DEPTH / 2;
-            [-85, 85, 0].forEach((x, i) => {
-                hazeDummy.position.set(x, 0.1, hazeZ);
-                hazeDummy.updateMatrix();
-                hazeInst.setMatrixAt(i, hazeDummy.matrix);
-            });
-
-            hazeInst.userData.key = hazeInst.userData.category = 'ocean_haze';
-            hazeInst.visible = false;
-            cell.group.add(hazeInst);
-            cell.instancedMeshesArray.push(hazeInst);
+        this.sceneryMeshes.forEach(m => {
+            m.instanceMatrix.needsUpdate = true;
+            if (m.instanceColor) m.instanceColor.needsUpdate = true;
         });
     }
 
     scrollCells(speed, biomeName) {
         this.backZ += speed;
-        this.cells.forEach(cell => {
-            cell.group.position.z += speed;
-            cell.group.updateMatrix();
+
+        for (let m = 0; m < this.sceneryMeshes.length; m++) {
+            const mesh = this.sceneryMeshes[m];
+            const arr = mesh.instanceMatrix.array;
+            const total = mesh.count * 16;
+            for (let i = 14; i < total; i += 16) {
+                arr[i] += speed;
+            }
+            mesh.instanceMatrix.needsUpdate = true;
+        }
+
+        for (let c = 0; c < this.cells.length; c++) {
+            const cell = this.cells[c];
             cell.zStart += speed;
             cell.zEnd += speed;
 
@@ -273,31 +346,52 @@ export class SceneryManager {
                 this.backZ = newZ;
                 this.recycleCell(cell, newZ, biomeName);
             }
-        });
+        }
     }
 
     recycleCell(cell, newZStart, biomeName) {
-        cell.group.position.z += newZStart - cell.zStart;
+        const deltaZ = newZStart - cell.zStart;
         cell.zStart = newZStart;
         cell.zEnd = newZStart + CONFIG.SPAWNER.CELL_DEPTH;
 
-        if (!biomeName || cell.currentBiome === biomeName) return;
-        cell.currentBiome = biomeName;
-
         const isDesert = biomeName === 'BURNING DESERT';
         const isOcean = biomeName === 'ABYSSAL OCEAN';
-        const palette = CONFIG.BIOME_COLORS[biomeName];
+        const palette = biomeName ? CONFIG.BIOME_COLORS[biomeName] : null;
 
-        cell.instancedMeshesArray.forEach(inst => {
-            const cat = inst.userData.category;
-            const vis = this.biomeVisibility[cat]?.(isDesert, isOcean);
-            if (vis !== undefined) inst.visible = vis;
+        cell.currentBiome = biomeName;
 
-            if (palette && inst.material && !inst.userData.isShadow) {
-                const role = inst.material.userData.role;
-                const color = palette[role];
-                if (color !== undefined) inst.material.color.setHex(color);
+        const tempColor = new THREE.Color();
+        const updatedColorMeshes = new Set();
+
+        for (let i = 0; i < cell.items.length; i++) {
+            const item = cell.items[i];
+            const arr = item.mesh.instanceMatrix.array;
+            const offset = item.idx * 16;
+
+            arr[offset + 14] += deltaZ;
+
+            const vis = this.biomeVisibility[item.category]?.(isDesert, isOcean) ?? true;
+            arr[offset + 13] = vis ? item.baseY : -999;
+
+            if (item.shadowMesh) {
+                const sArr = item.shadowMesh.instanceMatrix.array;
+                const sOffset = item.shadowIdx * 16;
+                sArr[sOffset + 14] += deltaZ;
+                sArr[sOffset + 13] = vis ? (item.shadowY || 0.06) : -999;
             }
+
+            if (palette && item.role) {
+                const color = palette[item.role];
+                if (color !== undefined) {
+                    tempColor.setHex(color);
+                    item.mesh.setColorAt(item.idx, tempColor);
+                    updatedColorMeshes.add(item.mesh);
+                }
+            }
+        }
+
+        updatedColorMeshes.forEach(mesh => {
+            if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
         });
     }
 }

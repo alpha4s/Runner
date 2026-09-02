@@ -15,7 +15,18 @@ export class AudioManager {
             const bufferSize = this.ctx.sampleRate * 2.0;
             this.noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
             const data = this.noiseBuffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+            let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+            for (let i = 0; i < bufferSize; i++) {
+                const white = Math.random() * 2 - 1;
+                b0 = 0.99886 * b0 + white * 0.0555179;
+                b1 = 0.99332 * b1 + white * 0.0750759;
+                b2 = 0.96900 * b2 + white * 0.1538520;
+                b3 = 0.86650 * b3 + white * 0.3104856;
+                b4 = 0.55000 * b4 + white * 0.5329522;
+                b5 = -0.7616 * b5 - white * 0.0168980;
+                data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.15;
+                b6 = white * 0.115926;
+            }
 
             this.masterGain = this.ctx.createGain();
             this.masterGain.gain.value = 0.4;
@@ -30,16 +41,11 @@ export class AudioManager {
             this.masterGain.connect(compressor);
             compressor.connect(this.ctx.destination);
         }
+
         if (this.ctx.state === 'suspended') this.ctx.resume();
         this.enabled = enabled;
     }
-    _playTone(frequency, duration, type, targetFrequency, volume, startTime, useLinear) {
-        if (type === undefined) type = 'sine';
-        if (targetFrequency === undefined) targetFrequency = null;
-        if (volume === undefined) volume = 0.3;
-        if (startTime === undefined) startTime = 0;
-        if (useLinear === undefined) useLinear = false;
-
+    _playTone(frequency, duration, type = 'sine', targetFrequency = null, volume = 0.3, startTime = 0, useLinear = false) {
         if (!this.enabled || !this.ctx) return;
         const now = this.ctx.currentTime + startTime;
         const oscillator = this.ctx.createOscillator();
@@ -61,8 +67,7 @@ export class AudioManager {
         oscillator.start(now);
         oscillator.stop(now + duration);
     }
-    _playNoise(duration, volume) {
-        if (volume === undefined) volume = 0.4;
+    _playNoise(duration, volume = 0.4) {
         if (!this.enabled || !this.ctx || !this.noiseBuffer) return;
 
         const noise = this.ctx.createBufferSource();
